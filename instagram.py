@@ -1,45 +1,74 @@
-"""instagram.py - post song reel to instagram via instagrapi (private/mobile api)
+"""instagram.py - post song reel to instagram via graph api
 
-instagrapi logs in as a real instagram client and uploads the local video
-file directly - no public hosting needed. this is an unofficial, reverse
-engineered api (not the graph api), so it carries a different risk: logging
-in or posting from an unfamiliar ip (e.g. a github actions runner) can trip
-instagram's automated abuse detection and force a checkpoint/2fa challenge
-that blocks the session until resolved manually in the app. reusing the same
-persisted session (SESSION_PATH) rather than logging in fresh every run is
-the primary mitigation - see README for how that session is bootstrapped.
+the finished mp4 is hosted as a github release asset (the repo is public) so
+the graph api has a url it can fetch the video from - there's no local-file
+upload path for reels via the simple content publishing flow.
 """
 
 import os
+import subprocess
+import time
+import requests
 from pathlib import Path
-
-from instagrapi import Client
 
 from spotify import Song
 from display import caption
 
-SESSION_PATH = Path(os.getenv("INSTAGRAM_SESSION_PATH", ".instagrapi_session.json"))
+POLL_INTERVAL = 5
+POLL_TIMEOUT  = 300
 
 
-def _client() -> Client:
-    username = os.environ["INSTAGRAM_USERNAME"]
-    password = os.environ["INSTAGRAM_PASSWORD"]
+def _upload_release_asset(video_path: Path) -> str:
+    repo = os.environ["GITHUB_REPOSITORY"]
+    tag  = f"reel-{int(time.time())}"
 
-    cl = Client()
-    if SESSION_PATH.exists():
-        cl.load_settings(SESSION_PATH)
+    subprocess.run(
+        [
+            "gh", "release", "create", tag, str(video_path),
+            "--title", tag,
+            "--notes", "auto-generated reel",
+        ],
+        check=True,
+    )
+    return f"https://github.com/{repo}/releases/download/{tag}/{video_path.name}"
 
-    try:
-        cl.login(username, password)
-        cl.get_timeline_feed()
-    except Exception:
-        cl = Client()
-        cl.login(username, password)
 
-    cl.dump_settings(SESSION_PATH)
-    return cl
+def _graph(endpoint: str, **kwargs) -> dict:
+    token   = os.getenv("INSTAGRAM_TOKEN")
+    user_id = os.getenv("INSTAGRAM_USER_ID")
+    base    = f"https://graph.instagram.com/{user_id}/{endpoint}"
+    return requests.post(base, params={"access_token": token}, **kwargs).json()
+
+
+def _wait_until_ready(container_id: str) -> None:
+    token    = os.getenv("INSTAGRAM_TOKEN")
+    url      = f"https://graph.instagram.com/{container_id}"
+    deadline = time.time() + POLL_TIMEOUT
+
+    while time.time() < deadline:
+        status = requests.get(
+            url, params={"fields": "status_code", "access_token": token}
+        ).json()
+        code = status.get("status_code")
+        if code == "FINISHED":
+            return
+        if code == "ERROR":
+            raise RuntimeError(f"instagram failed to process reel: {status}")
+        time.sleep(POLL_INTERVAL)
+
+    raise TimeoutError("instagram reel container did not finish processing in time")
 
 
 def post_song(song: Song, video_path: Path) -> None:
-    cl = _client()
-    cl.clip_upload(video_path, caption(song))
+    video_url = _upload_release_asset(video_path)
+
+    container = _graph(
+        "media",
+        data={
+            "media_type": "REELS",
+            "video_url":  video_url,
+            "caption":    caption(song),
+        },
+    )
+    _wait_until_ready(container["id"])
+    _graph("media_publish", data={"creation_id": container["id"]})
