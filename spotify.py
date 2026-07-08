@@ -10,11 +10,12 @@ from typing         import TypedDict
 
 
 class Song(TypedDict):
-    name:     str
-    artist:   str
-    album:    str
-    uri:      str
-    mp3_path: Path
+    name:      str
+    artist:    str
+    album:     str
+    uri:       str
+    image_url: str
+    mp3_path:  Path
 
 
 def _client() -> spotipy.Spotify:
@@ -74,6 +75,7 @@ def get_random_liked_song(
                 artist=artist,
                 album=track["album"]["name"],
                 uri=track["uri"],
+                image_url=track["album"]["images"][0]["url"],
                 mp3_path=_download(track["uri"], out_dir, verbose),
             )
         except LookupError:
