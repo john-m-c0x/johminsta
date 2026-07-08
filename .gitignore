@@ -1,0 +1,20 @@
+# secrets
+.env
+.cache
+.spotify_cache
+ 
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+ 
+# downloads
+song/
+*.mp3
+ 
+# os
+.DS_Store
+Thumbs.db
+ 

@@ -1,0 +1,5 @@
+spotipy
+spotdl
+rich
+requests
+python-dotenv
