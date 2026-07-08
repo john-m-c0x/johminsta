@@ -6,7 +6,8 @@ liked library and posts it to instagram.
 
   spotify.py     auth, fetch, download
   display.py     format, caption
-  instagram.py   graph api, post
+  video.py       render album art + audio into a reel
+  instagram.py   graph api, resumable upload, publish
 
 usage:
   python main.py          # silent run
@@ -28,7 +29,7 @@ def main(verbose: bool = False) -> None:
     song = get_random_liked_song(verbose=verbose)
 
     show_song(song)
-    post_song(song)
+    post_song(song, verbose=verbose)
 
 
 if __name__ == "__main__":
