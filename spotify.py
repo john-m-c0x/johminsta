@@ -10,11 +10,12 @@ from typing         import TypedDict
 
 
 class Song(TypedDict):
-    name:     str
-    artist:   str
-    album:    str
-    uri:      str
-    mp3_path: Path
+    name:      str
+    artist:    str
+    album:     str
+    uri:       str
+    image_url: str
+    mp3_path:  Path
 
 
 def _client() -> spotipy.Spotify:
@@ -28,13 +29,18 @@ def _client() -> spotipy.Spotify:
 
 
 def _random_track(sp: spotipy.Spotify) -> dict:
-    results = sp.current_user_saved_tracks(
-        limit=50, offset=random.randint(0, 1000)
-    )
-    return random.choice(results["items"])["track"]
+    total = sp.current_user_saved_tracks(limit=1)["total"]
+    if total == 0:
+        raise LookupError("no liked songs in library")
+    offset  = random.randint(0, total - 1)
+    results = sp.current_user_saved_tracks(limit=1, offset=offset)
+    return results["items"][0]["track"]
 
 
 def _download(uri: str, out_dir: Path, verbose: bool) -> Path:
+    for stale in out_dir.glob("*.mp3"):
+        stale.unlink()
+
     url    = f"https://open.spotify.com/track/{uri.split(':')[-1]}"
     result = subprocess.run(
         [
@@ -63,17 +69,21 @@ def get_random_liked_song(
     sp = _client()
 
     for attempt in range(1, max_retries + 1):
-        track  = _random_track(sp)
-        name   = track["name"]
-        artist = track["artists"][0]["name"]
-        if verbose:
-            print(f"[{attempt}/{max_retries}] trying: {name} - {artist}")
         try:
+            track  = _random_track(sp)
+            name   = track["name"]
+            artist = track["artists"][0]["name"]
+            images = track["album"]["images"]
+            if verbose:
+                print(f"[{attempt}/{max_retries}] trying: {name} - {artist}")
+            if not images:
+                raise LookupError("no album art available")
             return Song(
                 name=name,
                 artist=artist,
                 album=track["album"]["name"],
                 uri=track["uri"],
+                image_url=images[0]["url"],
                 mp3_path=_download(track["uri"], out_dir, verbose),
             )
         except LookupError:

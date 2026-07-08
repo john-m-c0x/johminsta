@@ -17,4 +17,9 @@ song/
 # os
 .DS_Store
 Thumbs.db
- 
+CLS
+
+# claude / agent / llm
+.claude/
+.mcp.json
+CLAUDE.local.md
