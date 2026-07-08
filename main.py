@@ -8,7 +8,7 @@ and posts it to instagram as a reel (album art + song info + 30s audio clip).
   chorus.py      find the song's hook (pychorus)
   display.py     terminal output, caption, panel screenshot
   video.py       compose the reel
-  instagram.py   graph api, post
+  instagram.py   instagrapi, post
 
 usage:
   python main.py          # silent run

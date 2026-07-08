@@ -6,3 +6,4 @@ python-dotenv
 pychorus
 cairosvg
 Pillow
+instagrapi
