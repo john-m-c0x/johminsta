@@ -59,4 +59,7 @@ jobs:
           INSTAGRAM_USER_ID:     ${{ secrets.INSTAGRAM_USER_ID }}
           GH_TOKEN:              ${{ github.token }}
           YOUTUBE_COOKIE_FILE:   ${{ runner.temp }}/youtube-cookies.txt
+          # try alternate youtube player clients that still expose downloadable
+          # (non-SABR) audio formats from datacenter IPs.
+          SPOTDL_YT_DLP_ARGS:    "--extractor-args youtube:player_client=default,tv,web_safari,mweb"
         run: python main.py -v

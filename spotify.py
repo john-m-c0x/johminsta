@@ -117,6 +117,13 @@ def _download(uri: str, out_dir: Path, expected_s: float, verbose: bool) -> Path
     if cookie_file and Path(cookie_file).is_file():
         args += ["--cookie-file", cookie_file]
 
+    # datacenter IPs increasingly only get SABR/po-token-gated formats, which
+    # yt-dlp reports as "Requested format is not available". forcing alternate
+    # youtube player clients can still surface a downloadable audio stream.
+    yt_dlp_args = os.getenv("SPOTDL_YT_DLP_ARGS")
+    if yt_dlp_args:
+        args += ["--yt-dlp-args", yt_dlp_args]
+
     result = subprocess.run(args, capture_output=True, text=True)
     if verbose:
         print(result.stdout)
