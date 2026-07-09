@@ -10,24 +10,25 @@ permissions:
 
 jobs:
   post:
-    runs-on: ubuntu-latest
+    # self-hosted so downloads run from a residential IP. youtube serves
+    # github's datacenter IPs SABR/po-token-gated formats that fail every
+    # spotdl download ("Requested format is not available") - a residential
+    # IP is not gated and needs no cookies. requires a machine with python,
+    # ffmpeg, and cairo on PATH (see README) running the actions runner.
+    runs-on: [self-hosted]
+    defaults:
+      run:
+        # git bash - the workflow uses posix shell syntax below.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libcairo2 libpango-1.0-0
-
       - name: install dependencies
-        # upgrade yt-dlp past whatever spotdl pins: youtube rotates its player
-        # constantly and a stale yt-dlp fails every download with "Requested
-        # format is not available". latest yt-dlp keeps up with those changes.
+        # keep yt-dlp current: youtube rotates its player constantly and a
+        # stale yt-dlp fails downloads with "Requested format is not available".
         run: |
-          pip install -r requirements.txt pynacl
-          pip install --upgrade yt-dlp
+          python -m pip install -r requirements.txt pynacl
+          python -m pip install --upgrade yt-dlp
 
       - name: refresh instagram token
         env:
@@ -36,10 +37,8 @@ jobs:
         run: python scripts/refresh_ig_token.py
 
       - name: write youtube cookies
-        # youtube bot-checks github's datacenter IPs; a cookie file from a
-        # logged-in session (stored as a secret in netscape format) gets
-        # yt-dlp/spotdl past it. no-op when the secret is unset, so the file
-        # simply won't exist and spotify.py skips the --cookie-file flag.
+        # optional on a residential IP, but harmless as a fallback if youtube
+        # ever rate-limits this machine. no-op when the secret is unset.
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
@@ -52,14 +51,11 @@ jobs:
 
       - name: post song
         env:
-          SPOTIFY_CLIENT_ID:     ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
-          SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+          SPOTIFY_CLIENT_ID:       ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET:   ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          SPOTIFY_REFRESH_TOKEN:   ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
           INSTAGRAM_ACCOUNT_TOKEN: ${{ secrets.INSTAGRAM_ACCOUNT_TOKEN }}
-          INSTAGRAM_USER_ID:     ${{ secrets.INSTAGRAM_USER_ID }}
-          GH_TOKEN:              ${{ github.token }}
-          YOUTUBE_COOKIE_FILE:   ${{ runner.temp }}/youtube-cookies.txt
-          # try alternate youtube player clients that still expose downloadable
-          # (non-SABR) audio formats from datacenter IPs.
-          SPOTDL_YT_DLP_ARGS:    "--extractor-args youtube:player_client=default,tv,web_safari,mweb"
+          INSTAGRAM_USER_ID:       ${{ secrets.INSTAGRAM_USER_ID }}
+          GH_TOKEN:                ${{ github.token }}
+          YOUTUBE_COOKIE_FILE:     ${{ runner.temp }}/youtube-cookies.txt
         run: python main.py -v
