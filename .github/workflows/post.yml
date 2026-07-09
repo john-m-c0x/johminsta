@@ -2,7 +2,9 @@ name: post song reel
 
 on:
   schedule:
-    - cron: "17 15 * * *"
+    # 07:00 UTC = 5pm Sydney (AEST). github cron ignores DST, so in Sydney
+    # summer (AEDT) this fires at 6pm - still inside the machine's on-hours.
+    - cron: "0 7 * * *"
   workflow_dispatch: {}
 
 permissions:
