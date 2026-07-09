@@ -4,11 +4,12 @@ import os
 import random
 import subprocess
 import spotipy
-from datetime        import datetime
-from mutagen.mp3     import MP3
-from pathlib         import Path
-from spotipy.oauth2  import SpotifyOAuth
-from typing          import TypedDict
+from datetime          import datetime
+from mutagen.mp3       import MP3
+from pathlib           import Path
+from spotipy.oauth2    import SpotifyOAuth
+from spotipy.exceptions import SpotifyOauthError
+from typing            import TypedDict
 
 # reject a download whose length strays from the spotify track by more than
 # this - catches spotdl grabbing an hour-long mix/compilation for a 3min song.
@@ -56,9 +57,21 @@ def _client() -> spotipy.Spotify:
     ))
 
 
+_REFRESH_TOKEN_HELP = (
+    "Spotify rejected the refresh token (invalid_grant). Mint a fresh one with "
+    "`python scripts/get_spotify_refresh_token.py` and update the "
+    "SPOTIFY_REFRESH_TOKEN secret. Make sure SPOTIFY_CLIENT_ID / "
+    "SPOTIFY_CLIENT_SECRET match the app the token was minted under - a token "
+    "from a different app fails this way."
+)
+
+
 def _random_saved_track(sp: spotipy.Spotify) -> dict:
     """a "saved tracks" item: {"added_at": ..., "track": {...}}"""
-    total = sp.current_user_saved_tracks(limit=1)["total"]
+    try:
+        total = sp.current_user_saved_tracks(limit=1)["total"]
+    except SpotifyOauthError as e:
+        raise RuntimeError(_REFRESH_TOKEN_HELP) from e
     if total == 0:
         raise LookupError("no liked songs in library")
     offset  = random.randint(0, total - 1)
