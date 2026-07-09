@@ -36,8 +36,9 @@ def show_song(song: Song) -> None:
 
 def caption(song: Song) -> str:
     return (
-        f"\n{song['name']}\n"
+        f"$\n"
+        f"{song['name']}\n"
         f"{song['artist']}\n"
         f"{song['album']}\n\n"
-        f"date liked: {song['liked_at']}"
-    )
+        f"{song['liked_at']}"
+    ).lower()
