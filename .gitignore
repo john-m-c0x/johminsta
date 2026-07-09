@@ -20,6 +20,7 @@ song/
 .DS_Store
 Thumbs.db
 
-# claude code
+# claude / agent / llm
 .claude/
- 
+.mcp.json
+CLAUDE.local.md

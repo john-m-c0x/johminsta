@@ -1,9 +1,12 @@
-name: post random liked song
+name: post song reel
 
 on:
   schedule:
-    - cron: "0 16 * * *"  # 16:00 UTC daily - adjust as desired
+    - cron: "17 15 * * *"
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   post:
@@ -16,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libcairo2 libpango-1.0-0
 
       - name: install dependencies
         run: pip install -r requirements.txt pynacl
@@ -32,5 +35,7 @@ jobs:
           SPOTIFY_CLIENT_ID:     ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+          INSTAGRAM_ACCOUNT_TOKEN: ${{ secrets.INSTAGRAM_ACCOUNT_TOKEN }}
           INSTAGRAM_USER_ID:     ${{ secrets.INSTAGRAM_USER_ID }}
+          GH_TOKEN:              ${{ github.token }}
         run: python main.py -v

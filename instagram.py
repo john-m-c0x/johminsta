@@ -1,11 +1,37 @@
-"""instagram.py - post song to instagram via graph api"""
+"""instagram.py - post song reel to instagram via graph api
+
+the finished mp4 is hosted as a github release asset (the repo is public) so
+the graph api has a url it can fetch the video from - there's no local-file
+upload path for reels via the simple content publishing flow.
+"""
 
 import os
-import webbrowser
+import subprocess
+import time
+from pathlib import Path
+
 import requests
 
 from spotify import Song
 from display import caption
+
+POLL_INTERVAL = 5
+POLL_TIMEOUT  = 300
+
+
+def _upload_release_asset(video_path: Path) -> str:
+    repo = os.environ["GITHUB_REPOSITORY"]
+    tag  = f"reel-{int(time.time())}"
+
+    subprocess.run(
+        [
+            "gh", "release", "create", tag, str(video_path),
+            "--title", tag,
+            "--notes", "auto-generated reel",
+        ],
+        check=True,
+    )
+    return f"https://github.com/{repo}/releases/download/{tag}/{video_path.name}"
 
 
 def _graph(endpoint: str, **kwargs) -> dict:
@@ -18,19 +44,35 @@ def _graph(endpoint: str, **kwargs) -> dict:
     return result
 
 
-def post_song(song: Song, dry_run: bool = False) -> None:
+def _wait_until_ready(container_id: str) -> None:
+    token    = os.getenv("INSTAGRAM_ACCOUNT_TOKEN")
+    url      = f"https://graph.instagram.com/{container_id}"
+    deadline = time.time() + POLL_TIMEOUT
+
+    while time.time() < deadline:
+        status = requests.get(
+            url, params={"fields": "status_code", "access_token": token}
+        ).json()
+        code = status.get("status_code")
+        if code == "FINISHED":
+            return
+        if code == "ERROR":
+            raise RuntimeError(f"instagram failed to process reel: {status}")
+        time.sleep(POLL_INTERVAL)
+
+    raise TimeoutError("instagram reel container did not finish processing in time")
+
+
+def post_song(song: Song, video_path: Path) -> None:
+    video_url = _upload_release_asset(video_path)
+
     container = _graph(
         "media",
         data={
-            "image_url": song["image_url"],
-            "caption":   caption(song),
+            "media_type": "REELS",
+            "video_url":  video_url,
+            "caption":    caption(song),
         },
     )
-    if dry_run:
-        print(f"[dry-run] media container created: {container['id']}")
-        print(f"[dry-run] caption:\n{caption(song)}")
-        print(f"[dry-run] opening image in browser: {song['image_url']}")
-        webbrowser.open(song["image_url"])
-        print("[dry-run] skipping media_publish - nothing was posted")
-        return
+    _wait_until_ready(container["id"])
     _graph("media_publish", data={"creation_id": container["id"]})
