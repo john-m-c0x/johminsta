@@ -4,3 +4,4 @@ rich
 requests
 python-dotenv
 pydub
+mutagen
