@@ -3,3 +3,4 @@ spotdl
 rich
 requests
 python-dotenv
+pydub
