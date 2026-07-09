@@ -11,8 +11,11 @@ and posts it to instagram as a reel (album art + song info + 30s audio clip).
   instagram.py   graph api, post
 
 usage:
-  python main.py          # silent run
-  python main.py -v       # verbose
+  python main.py               # silent run
+  python main.py -v            # verbose
+  python main.py --dry-run     # build the reel but don't post it; leaves
+                                # reel.mp4 + caption.txt in the output dir
+                                # for inspection (implies -v)
 
 """
 
@@ -22,12 +25,12 @@ from dotenv  import load_dotenv
 
 from spotify   import get_random_liked_song
 from chorus    import find_hook_clip
-from display   import show_song, export_panel_image
+from display   import show_song, export_panel_image, caption
 from video     import build_reel
 from instagram import post_song
 
 
-def main(verbose: bool = False) -> None:
+def main(verbose: bool = False, dry_run: bool = False) -> None:
     load_dotenv()
 
     out_dir = Path.home() / "song"
@@ -40,8 +43,17 @@ def main(verbose: bool = False) -> None:
     panel_png  = export_panel_image(song, out_dir / "panel.png")
     video_path = build_reel(song, panel_png, hook_clip, out_dir)
 
+    if dry_run:
+        caption_path = out_dir / "caption.txt"
+        caption_path.write_text(caption(song), encoding="utf-8")
+        print(f"\ndry run - nothing posted. output in {out_dir}:")
+        print(f"  video:   {video_path}")
+        print(f"  caption: {caption_path}")
+        return
+
     post_song(song, video_path)
 
 
 if __name__ == "__main__":
-    main(verbose="-v" in sys.argv)
+    dry_run = "--dry-run" in sys.argv or "-n" in sys.argv
+    main(verbose=dry_run or "-v" in sys.argv, dry_run=dry_run)
