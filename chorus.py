@@ -1,14 +1,17 @@
-"""chorus.py - pick the song's hype moment: a 30s window where energy peaks after a rise"""
+"""chorus.py - pick the song's hype moment: a window where energy peaks after a rise"""
 
 import sys
 from pathlib import Path
 
 from pydub import AudioSegment
 
-CHUNK_MS  = 1_000   # granularity (seconds) for the energy scan
-LEAD_IN_S = 5       # seconds of "before" context a window is compared against
-LIFT_BIAS = 1.5     # how much extra weight a rise in energy gets over raw loudness
-FLOOR_DB  = -60.0   # clamp near-silence so it can't blow up the average with -inf
+CHUNK_MS     = 1_000   # granularity (seconds) for the energy scan
+LEAD_IN_S    = 5       # seconds of "before" context a window is compared against
+LIFT_BIAS    = 1.5     # how much extra weight a rise in energy gets over raw loudness
+FLOOR_DB     = -60.0   # clamp near-silence so it can't blow up the average with -inf
+PRE_ROLL_S   = 5       # seconds of anticipation to include before the detected drop
+CLIP_LENGTH  = 60      # length of the exported hook clip, in seconds
+EXPORT_BITRATE = "320k"  # re-encode at mp3's max so the clip doesn't lose fidelity
 
 
 def _energy_profile(audio: AudioSegment) -> list[float]:
@@ -49,24 +52,37 @@ def _best_start(levels: list[float], clip_length: int) -> int:
     return best_start
 
 
-def find_hook_clip(mp3_path: Path, out_path: Path, clip_length: int = 30) -> Path:
+def _select_clip(audio: AudioSegment, clip_length: int) -> AudioSegment:
+    """
+    return the clip_length-second slice of `audio` that best captures the hook.
+    analysis runs on a mono downmix (loudness only), but the returned slice is
+    cut from the original `audio` so channels/bitrate are preserved. falls back
+    to the whole track when it's shorter than clip_length.
+    """
+    if len(audio) <= clip_length * 1000:
+        return audio
+
+    levels = _energy_profile(audio.set_channels(1))
+    drop   = _best_start(levels, clip_length)
+    start  = max(0, drop - PRE_ROLL_S)
+    return audio[start * 1000: (start + clip_length) * 1000]
+
+
+def find_hook_clip(mp3_path: Path, out_path: Path, clip_length: int = CLIP_LENGTH) -> Path:
     """
     scan the track in 1s slices for the loudest clip_length-second window that
-    follows a rise in energy, and export that window to out_path. falls back
-    to the loudest window alone when nothing else stands out, and to the
-    whole track when it's shorter than clip_length - so no track can fail to
-    produce a clip.
+    follows a rise in energy - the drop - and export a clip starting PRE_ROLL_S
+    seconds before it, so the listener gets a moment of anticipation instead of
+    landing right on the hit. the clip is cut from the original audio and
+    re-encoded at EXPORT_BITRATE, keeping the source's channels and fidelity.
     """
-    audio  = AudioSegment.from_file(mp3_path).set_channels(1)
-    levels = _energy_profile(audio)
-
-    if len(levels) <= clip_length:
-        clip = audio
-    else:
-        start = _best_start(levels, clip_length)
-        clip  = audio[start * 1000: (start + clip_length) * 1000]
-
-    clip.export(out_path, format=out_path.suffix.lstrip(".") or "mp3")
+    audio = AudioSegment.from_file(mp3_path)
+    clip  = _select_clip(audio, clip_length)
+    clip.export(
+        out_path,
+        format=out_path.suffix.lstrip(".") or "mp3",
+        bitrate=EXPORT_BITRATE,
+    )
     return out_path
 
 
