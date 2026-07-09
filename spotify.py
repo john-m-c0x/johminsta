@@ -98,19 +98,26 @@ def _download(uri: str, out_dir: Path, expected_s: float, verbose: bool) -> Path
     for stale in out_dir.glob("*.mp3"):
         stale.unlink()
 
-    url    = f"https://open.spotify.com/track/{uri.split(':')[-1]}"
-    result = subprocess.run(
-        [
-            "spotdl", url,
-            "--audio",  "youtube", "youtube-music",
-            "--output", str(out_dir),
-            # no --dont-filter-results: let spotdl match candidates against the
-            # spotify track's own title/artist/duration instead of grabbing the
-            # first raw search hit, which can be an hour-long mix or - worse,
-            # since it can share the right length - a completely different song.
-        ],
-        capture_output=True, text=True,
-    )
+    url  = f"https://open.spotify.com/track/{uri.split(':')[-1]}"
+    args = [
+        "spotdl", url,
+        "--audio",  "youtube", "youtube-music",
+        "--output", str(out_dir),
+        # no --dont-filter-results: let spotdl match candidates against the
+        # spotify track's own title/artist/duration instead of grabbing the
+        # first raw search hit, which can be an hour-long mix or - worse,
+        # since it can share the right length - a completely different song.
+    ]
+
+    # datacenter IPs (e.g. github-hosted runners) get bot-checked by youtube:
+    # "Sign in to confirm you're not a bot". a cookie file from a logged-in
+    # session gets yt-dlp past it. only pass it when it actually exists so
+    # local runs without cookies still work.
+    cookie_file = os.getenv("YOUTUBE_COOKIE_FILE")
+    if cookie_file and Path(cookie_file).is_file():
+        args += ["--cookie-file", cookie_file]
+
+    result = subprocess.run(args, capture_output=True, text=True)
     if verbose:
         print(result.stdout)
     mp3s = list(out_dir.glob("*.mp3"))

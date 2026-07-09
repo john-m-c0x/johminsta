@@ -30,6 +30,21 @@ jobs:
           GH_PAT:                  ${{ secrets.GH_PAT }}
         run: python scripts/refresh_ig_token.py
 
+      - name: write youtube cookies
+        # youtube bot-checks github's datacenter IPs; a cookie file from a
+        # logged-in session (stored as a secret in netscape format) gets
+        # yt-dlp/spotdl past it. no-op when the secret is unset, so the file
+        # simply won't exist and spotify.py skips the --cookie-file flag.
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            printf '%s' "$YOUTUBE_COOKIES" > "$RUNNER_TEMP/youtube-cookies.txt"
+            echo "wrote cookie file"
+          else
+            echo "YOUTUBE_COOKIES secret is empty; running without cookies"
+          fi
+
       - name: post song
         env:
           SPOTIFY_CLIENT_ID:     ${{ secrets.SPOTIFY_CLIENT_ID }}
@@ -38,4 +53,5 @@ jobs:
           INSTAGRAM_ACCOUNT_TOKEN: ${{ secrets.INSTAGRAM_ACCOUNT_TOKEN }}
           INSTAGRAM_USER_ID:     ${{ secrets.INSTAGRAM_USER_ID }}
           GH_TOKEN:              ${{ github.token }}
+          YOUTUBE_COOKIE_FILE:   ${{ runner.temp }}/youtube-cookies.txt
         run: python main.py -v
