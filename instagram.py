@@ -66,12 +66,16 @@ def _wait_until_ready(container_id: str) -> None:
 def post_song(song: Song, video_path: Path) -> None:
     video_url = _upload_release_asset(video_path)
 
+    # instagram deprecated the plain VIDEO media_type - all video now goes
+    # through REELS, but share_to_feed keeps it showing in the main feed
+    # grid (as a square post) rather than only in the reels tab.
     container = _graph(
         "media",
         data={
-            "media_type": "VIDEO",
-            "video_url":  video_url,
-            "caption":    caption(song),
+            "media_type":   "REELS",
+            "video_url":    video_url,
+            "caption":      caption(song),
+            "share_to_feed": "true",
         },
     )
     _wait_until_ready(container["id"])
