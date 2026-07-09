@@ -2,19 +2,19 @@
 random liked song
 
 pulls one song at random from your spotify liked library, finds its hook,
-and posts it to instagram as a reel (album art + song info + 30s audio clip).
+and posts it to instagram as a video post (album art + a 60s audio clip).
 
   spotify.py     auth, fetch, download
   chorus.py      find the song's hook/hype moment (energy-based)
-  display.py     terminal output, caption, panel screenshot
-  video.py       compose the reel
+  display.py     terminal output, caption
+  video.py       compose the post
   instagram.py   graph api, post
 
 usage:
   python main.py               # silent run
   python main.py -v            # verbose
-  python main.py --dry-run     # build the reel but don't post it; leaves
-                                # reel.mp4 + caption.txt in the output dir
+  python main.py --dry-run     # build the post but don't post it; leaves
+                                # post.mp4 + caption.txt in the output dir
                                 # for inspection (implies -v)
 
 """
@@ -25,8 +25,8 @@ from dotenv  import load_dotenv
 
 from spotify   import get_random_liked_song
 from chorus    import find_hook_clip
-from display   import show_song, export_panel_image, caption
-from video     import build_reel
+from display   import show_song, caption
+from video     import build_post
 from instagram import post_song
 
 
@@ -40,8 +40,7 @@ def main(verbose: bool = False, dry_run: bool = False) -> None:
     show_song(song)
 
     hook_clip  = find_hook_clip(song["mp3_path"], out_dir / "hook.wav")
-    panel_png  = export_panel_image(song, out_dir / "panel.png")
-    video_path = build_reel(song, panel_png, hook_clip, out_dir)
+    video_path = build_post(song, hook_clip, out_dir)
 
     if dry_run:
         caption_path = out_dir / "caption.txt"

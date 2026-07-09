@@ -1,8 +1,8 @@
-"""instagram.py - post song reel to instagram via graph api
+"""instagram.py - post song video to instagram via graph api
 
 the finished mp4 is hosted as a github release asset (the repo is public) so
 the graph api has a url it can fetch the video from - there's no local-file
-upload path for reels via the simple content publishing flow.
+upload path via the simple content publishing flow.
 """
 
 import os
@@ -21,13 +21,13 @@ POLL_TIMEOUT  = 300
 
 def _upload_release_asset(video_path: Path) -> str:
     repo = os.environ["GITHUB_REPOSITORY"]
-    tag  = f"reel-{int(time.time())}"
+    tag  = f"post-{int(time.time())}"
 
     subprocess.run(
         [
             "gh", "release", "create", tag, str(video_path),
             "--title", tag,
-            "--notes", "auto-generated reel",
+            "--notes", "auto-generated post",
         ],
         check=True,
     )
@@ -57,10 +57,10 @@ def _wait_until_ready(container_id: str) -> None:
         if code == "FINISHED":
             return
         if code == "ERROR":
-            raise RuntimeError(f"instagram failed to process reel: {status}")
+            raise RuntimeError(f"instagram failed to process video: {status}")
         time.sleep(POLL_INTERVAL)
 
-    raise TimeoutError("instagram reel container did not finish processing in time")
+    raise TimeoutError("instagram media container did not finish processing in time")
 
 
 def post_song(song: Song, video_path: Path) -> None:
@@ -69,7 +69,7 @@ def post_song(song: Song, video_path: Path) -> None:
     container = _graph(
         "media",
         data={
-            "media_type": "REELS",
+            "media_type": "VIDEO",
             "video_url":  video_url,
             "caption":    caption(song),
         },
