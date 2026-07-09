@@ -1,0 +1,36 @@
+name: post random liked song
+
+on:
+  schedule:
+    - cron: "0 16 * * *"  # 16:00 UTC daily - adjust as desired
+  workflow_dispatch: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: install dependencies
+        run: pip install -r requirements.txt pynacl
+
+      - name: refresh instagram token
+        env:
+          INSTAGRAM_ACCOUNT_TOKEN: ${{ secrets.INSTAGRAM_ACCOUNT_TOKEN }}
+          GH_PAT:                  ${{ secrets.GH_PAT }}
+        run: python scripts/refresh_ig_token.py
+
+      - name: post song
+        env:
+          SPOTIFY_CLIENT_ID:     ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+          INSTAGRAM_USER_ID:     ${{ secrets.INSTAGRAM_USER_ID }}
+        run: python main.py -v

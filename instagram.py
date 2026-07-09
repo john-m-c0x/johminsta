@@ -1,30 +1,24 @@
 """instagram.py - post song to instagram via graph api"""
 
 import os
+import webbrowser
 import requests
-from pathlib import Path
 
 from spotify import Song
 from display import caption
 
 
-TMP_ART = Path.home() / "song" / "cover.jpg"
-
-
-def _download_art(url: str) -> Path:
-    TMP_ART.parent.mkdir(exist_ok=True)
-    TMP_ART.write_bytes(requests.get(url, timeout=10).content)
-    return TMP_ART
-
-
 def _graph(endpoint: str, **kwargs) -> dict:
-    token   = os.getenv("INSTAGRAM_TOKEN")
+    token   = os.getenv("INSTAGRAM_ACCOUNT_TOKEN")
     user_id = os.getenv("INSTAGRAM_USER_ID")
     base    = f"https://graph.instagram.com/{user_id}/{endpoint}"
-    return requests.post(base, params={"access_token": token}, **kwargs).json()
+    result  = requests.post(base, params={"access_token": token}, **kwargs).json()
+    if "error" in result:
+        raise RuntimeError(f"graph api error on {endpoint}: {result['error']}")
+    return result
 
 
-def post_song(song: Song) -> None:
+def post_song(song: Song, dry_run: bool = False) -> None:
     container = _graph(
         "media",
         data={
@@ -32,4 +26,11 @@ def post_song(song: Song) -> None:
             "caption":   caption(song),
         },
     )
+    if dry_run:
+        print(f"[dry-run] media container created: {container['id']}")
+        print(f"[dry-run] caption:\n{caption(song)}")
+        print(f"[dry-run] opening image in browser: {song['image_url']}")
+        webbrowser.open(song["image_url"])
+        print("[dry-run] skipping media_publish - nothing was posted")
+        return
     _graph("media_publish", data={"creation_id": container["id"]})

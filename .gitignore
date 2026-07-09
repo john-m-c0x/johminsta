@@ -2,8 +2,10 @@
 .env
 .cache
 .spotify_cache
- 
+accounts
+
 # python
+CLS
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -17,4 +19,7 @@ song/
 # os
 .DS_Store
 Thumbs.db
+
+# claude code
+.claude/
  
