@@ -22,7 +22,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libcairo2 libpango-1.0-0
 
       - name: install dependencies
-        run: pip install -r requirements.txt pynacl
+        # upgrade yt-dlp past whatever spotdl pins: youtube rotates its player
+        # constantly and a stale yt-dlp fails every download with "Requested
+        # format is not available". latest yt-dlp keeps up with those changes.
+        run: |
+          pip install -r requirements.txt pynacl
+          pip install --upgrade yt-dlp
 
       - name: refresh instagram token
         env:
