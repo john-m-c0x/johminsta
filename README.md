@@ -1,6 +1,6 @@
 # random liked song
 
-pulls a random song from your spotify liked library, finds its musical hook, and posts it to instagram daily as a reel (album art + song info panel + a 30s audio clip).
+pulls a random song from your spotify liked library, finds its musical hook, and posts it to instagram daily as a video post (album art + a hook audio clip).
 
 ## setup
 
@@ -13,8 +13,10 @@ fill in `.env` with your credentials (see below).
 ## usage
 
 ```powershell
-python main.py       # run silently
-python main.py -v    # verbose - shows spotdl progress and retry attempts
+python main.py            # run silently
+python main.py -v         # verbose - shows spotdl progress and retry attempts
+python main.py --dry-run  # build the post but don't post it - inspect
+                           # post.mp4 + caption.txt in the output dir first
 ```
 
 first run opens a browser tab for spotify oauth. approving it writes a local `.spotify_cache` file so subsequent runs are silent.
@@ -35,9 +37,9 @@ first run opens a browser tab for spotify oauth. approving it writes a local `.s
 main.py                          entry point, -v flag
 spotify.py                       spotify auth, random track pick, spotdl download
 chorus.py                        finds the song's hook/hype moment (energy-based)
-display.py                       rich terminal output, caption, panel screenshot export
-video.py                         composes the reel (album art + panel screenshot + hook clip)
-instagram.py                     graph api post (reels), hosts the clip as a github release
+display.py                       rich terminal output, caption
+video.py                         composes the post (album art + hook clip)
+instagram.py                     graph api post (feed video), hosts the clip as a github release
 scripts/refresh_ig_token.py      extends the instagram token, used by the workflow
 ```
 
@@ -46,15 +48,15 @@ scripts/refresh_ig_token.py      extends the instagram token, used by the workfl
 - [spotipy](https://github.com/spotipy-dev/spotipy) - spotify api client
 - [spotdl](https://github.com/spotDL/spotify-downloader) - mp3 download + metadata
 - [pydub](https://github.com/jiaaro/pydub) - energy-based hook/chorus clip detection
-- [rich](https://github.com/Textualize/rich) - terminal formatting + panel screenshot
-- [cairosvg](https://cairosvg.org/) - renders the panel screenshot (svg -> png)
-- [Pillow](https://python-pillow.org/) - composes the reel frame
-- ffmpeg - required by spotdl and for muxing the reel
-- [gh cli](https://cli.github.com/) - used to upload the reel as a github release asset (preinstalled on github-hosted runners)
+- [rich](https://github.com/Textualize/rich) - terminal formatting
+- [mutagen](https://mutagen.readthedocs.io/) - probes downloaded mp3 duration
+- [Pillow](https://python-pillow.org/) - composes the post frame
+- ffmpeg - required by spotdl and for muxing the post video
+- [gh cli](https://cli.github.com/) - used to upload the post video as a github release asset (preinstalled on github-hosted runners)
 
 ## github actions
 
-`.github/workflows/post.yml` runs the bot daily (and via manual `workflow_dispatch`), headless. Instagram's Graph API needs a public URL to fetch the reel video from, so the workflow uploads each generated `.mp4` as a GitHub Release asset (the repo must be public) and passes that URL to the API - no third-party hosting needed.
+`.github/workflows/post.yml` runs the bot daily (and via manual `workflow_dispatch`), headless. Instagram's Graph API needs a public URL to fetch the video from, so the workflow uploads each generated `.mp4` as a GitHub Release asset (the repo must be public) and passes that URL to the API - no third-party hosting needed.
 
 **required repo secrets** (Settings -> Secrets and variables -> Actions):
 

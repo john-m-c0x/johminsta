@@ -5,5 +5,4 @@ requests
 python-dotenv
 pydub
 mutagen
-cairosvg
 Pillow

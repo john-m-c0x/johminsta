@@ -4,10 +4,11 @@ import os
 import random
 import subprocess
 import spotipy
-from mutagen.mp3    import MP3
-from pathlib        import Path
-from spotipy.oauth2 import SpotifyOAuth
-from typing         import TypedDict
+from datetime        import datetime
+from mutagen.mp3     import MP3
+from pathlib         import Path
+from spotipy.oauth2  import SpotifyOAuth
+from typing          import TypedDict
 
 # reject a download whose length strays from the spotify track by more than
 # this - catches spotdl grabbing an hour-long mix/compilation for a 3min song.
@@ -22,6 +23,7 @@ class Song(TypedDict):
     album:     str
     uri:       str
     image_url: str
+    liked_at:  str
     mp3_path:  Path
 
 
@@ -54,13 +56,18 @@ def _client() -> spotipy.Spotify:
     ))
 
 
-def _random_track(sp: spotipy.Spotify) -> dict:
+def _random_saved_track(sp: spotipy.Spotify) -> dict:
+    """a "saved tracks" item: {"added_at": ..., "track": {...}}"""
     total = sp.current_user_saved_tracks(limit=1)["total"]
     if total == 0:
         raise LookupError("no liked songs in library")
     offset  = random.randint(0, total - 1)
     results = sp.current_user_saved_tracks(limit=1, offset=offset)
-    return results["items"][0]["track"]
+    return results["items"][0]
+
+
+def _format_liked_date(added_at: str) -> str:
+    return datetime.strptime(added_at, "%Y-%m-%dT%H:%M:%SZ").strftime("%B %d, %Y")
 
 
 def _probe_duration(mp3_path: Path) -> float | None:
@@ -131,7 +138,8 @@ def get_random_liked_song(
 
     for attempt in range(1, max_retries + 1):
         try:
-            track  = _random_track(sp)
+            item   = _random_saved_track(sp)
+            track  = item["track"]
             name   = track["name"]
             artist = track["artists"][0]["name"]
             images = track["album"]["images"]
@@ -145,6 +153,7 @@ def get_random_liked_song(
                 album=track["album"]["name"],
                 uri=track["uri"],
                 image_url=images[0]["url"],
+                liked_at=_format_liked_date(item["added_at"]),
                 mp3_path=_download(
                     track["uri"], out_dir, track["duration_ms"] / 1000, verbose
                 ),
