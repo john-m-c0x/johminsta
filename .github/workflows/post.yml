@@ -18,6 +18,11 @@ jobs:
     # IP is not gated and needs no cookies. requires a machine with python,
     # ffmpeg, and cairo on PATH (see README) running the actions runner.
     runs-on: [self-hosted]
+    env:
+      # the runner's stdout is cp1252 on windows; force utf-8 so rich can
+      # print emoji/unicode (song titles, the headphone glyph) without a
+      # UnicodeEncodeError.
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
 
