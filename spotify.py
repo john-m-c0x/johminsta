@@ -3,6 +3,7 @@
 import os
 import random
 import subprocess
+import requests
 import spotipy
 from datetime          import datetime
 from mutagen.mp3       import MP3
@@ -26,6 +27,7 @@ class Song(TypedDict):
     image_url: str
     liked_at:  str
     mp3_path:  Path
+    features:  dict  # spotify audio-features, or {} if unavailable
 
 
 def _client() -> spotipy.Spotify:
@@ -77,6 +79,43 @@ def _random_saved_track(sp: spotipy.Spotify) -> dict:
     offset  = random.randint(0, total - 1)
     results = sp.current_user_saved_tracks(limit=1, offset=offset)
     return results["items"][0]
+
+
+RECCOBEATS_API = "https://api.reccobeats.com/v1"
+
+
+def _audio_features(uri: str, verbose: bool) -> dict:
+    """the track's audio-features (danceability, energy, tempo, key, ...).
+
+    spotify deprecated its own audio-features endpoint in nov 2024, so we source
+    the same fields from reccobeats, which mirrors the old spotify schema and is
+    keyed by spotify id. two hops: resolve the spotify id to reccobeats' own id,
+    then fetch that id's features. any failure -> {}; the slide is a bonus, not
+    a reason to drop the song.
+    """
+    spotify_id = uri.split(":")[-1]
+    try:
+        lookup  = requests.get(
+            f"{RECCOBEATS_API}/track", params={"ids": spotify_id}, timeout=10
+        ).json()
+        content = lookup.get("content") or []
+        if not content:
+            raise LookupError("track not in reccobeats catalog")
+        track    = content[0]
+        features = requests.get(
+            f"{RECCOBEATS_API}/track/{track['id']}/audio-features", timeout=10
+        ).json()
+        if "danceability" not in features:
+            raise LookupError(f"no audio-features returned: {features}")
+        # reccobeats keeps duration on the track record, not in audio-features -
+        # fold it in so the slide can show it alongside the rest.
+        if track.get("durationMs"):
+            features["duration_ms"] = track["durationMs"]
+        return features
+    except Exception as e:  # noqa: BLE001 - network/catalog gaps are non-fatal
+        if verbose:
+            print(f"  ! audio-features unavailable: {e}")
+        return {}
 
 
 def _format_liked_date(added_at: str) -> str:
@@ -184,6 +223,7 @@ def get_random_liked_song(
                 mp3_path=_download(
                     track["uri"], out_dir, track["duration_ms"] / 1000, verbose
                 ),
+                features=_audio_features(track["uri"], verbose),
             )
         except LookupError:
             if verbose:

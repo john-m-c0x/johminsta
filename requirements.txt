@@ -6,3 +6,4 @@ python-dotenv
 pydub
 mutagen
 Pillow
+numpy

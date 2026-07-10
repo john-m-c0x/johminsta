@@ -4,11 +4,12 @@ random liked song
 pulls one song at random from your spotify liked library, finds its hook,
 and posts it to instagram as a video post (album art + a 60s audio clip).
 
-  spotify.py     auth, fetch, download
+  spotify.py     auth, fetch, download, audio-features (via reccobeats)
   chorus.py      find the song's hook/hype moment (energy-based)
   display.py     terminal output, caption
-  video.py       compose the post
-  instagram.py   graph api, post
+  slide.py       render the audio-features json as a datamosh slide
+  video.py       compose the post (album-art video + analysis slide)
+  instagram.py   graph api, post (single reel or two-slide carousel)
 
 usage:
   python main.py               # silent run
@@ -39,18 +40,19 @@ def main(verbose: bool = False, dry_run: bool = False) -> None:
     song = get_random_liked_song(out_dir=out_dir, verbose=verbose)
     show_song(song)
 
-    hook_clip  = find_hook_clip(song["mp3_path"], out_dir / "hook.wav")
-    video_path = build_post(song, hook_clip, out_dir)
+    hook_clip = find_hook_clip(song["mp3_path"], out_dir / "hook.wav")
+    post      = build_post(song, hook_clip, out_dir)
 
     if dry_run:
         caption_path = out_dir / "caption.txt"
         caption_path.write_text(caption(song), encoding="utf-8")
         print(f"\ndry run - nothing posted. output in {out_dir}:")
-        print(f"  video:   {video_path}")
+        print(f"  video:   {post.video}")
+        print(f"  slide:   {post.slide or '(no audio-features available)'}")
         print(f"  caption: {caption_path}")
         return
 
-    post_song(song, video_path)
+    post_song(song, post)
 
 
 if __name__ == "__main__":

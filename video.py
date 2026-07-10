@@ -2,13 +2,21 @@
 
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 import requests
 from PIL import Image
 
 from spotify import Song
+from slide   import build_slide
 
 FRAME_SIZE = 1080
+
+
+class Post(NamedTuple):
+    """the carousel's slides: an album-art video and the analysis image."""
+    video: Path
+    slide: Path | None  # None when the track has no audio-features to show
 
 
 def _download_art(song: Song, out_path: Path) -> Path:
@@ -23,7 +31,7 @@ def _compose_frame(art_path: Path, out_path: Path) -> Path:
     return out_path
 
 
-def build_post(song: Song, audio_clip: Path, out_dir: Path) -> Path:
+def build_post(song: Song, audio_clip: Path, out_dir: Path) -> Post:
     art_path   = _download_art(song, out_dir / "art.jpg")
     frame_path = _compose_frame(art_path, out_dir / "frame.png")
     video_path = out_dir / "post.mp4"
@@ -41,4 +49,12 @@ def build_post(song: Song, audio_clip: Path, out_dir: Path) -> Path:
         ],
         capture_output=True, check=True,
     )
-    return video_path
+
+    # slide 2: the track's audio-features as a datamosh'd json screenshot. only
+    # when features are available (the endpoint is deprecated for newer apps).
+    slide_path = None
+    if song["features"]:
+        slide_path = build_slide(song["features"], out_dir / "slide.png",
+                                 name=song["name"])
+
+    return Post(video=video_path, slide=slide_path)
