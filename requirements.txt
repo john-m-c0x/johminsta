@@ -7,3 +7,4 @@ pydub
 mutagen
 Pillow
 numpy
+librosa

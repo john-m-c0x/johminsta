@@ -5,6 +5,7 @@ pulls one song at random from your spotify liked library, finds its hook,
 and posts it to instagram as a video post (album art + a 60s audio clip).
 
   spotify.py     auth, fetch, download, audio-features (via reccobeats)
+  analysis.py    local audio-features fallback (librosa) for catalog gaps
   chorus.py      find the song's hook/hype moment (energy-based)
   display.py     terminal output, caption
   slide.py       render the audio-features json as a datamosh slide
@@ -25,6 +26,7 @@ from pathlib import Path
 from dotenv  import load_dotenv
 
 from spotify   import get_random_liked_song
+from analysis  import analyze_track
 from chorus    import find_hook_clip
 from display   import show_song, caption
 from video     import build_post
@@ -39,6 +41,13 @@ def main(verbose: bool = False, dry_run: bool = False) -> None:
 
     song = get_random_liked_song(out_dir=out_dir, verbose=verbose)
     show_song(song)
+
+    # reccobeats has catalog gaps; analyze the mp3 locally rather than posting
+    # without the analysis slide.
+    if not song["features"]:
+        if verbose:
+            print("features missing - falling back to local analysis")
+        song["features"] = analyze_track(song["mp3_path"], verbose=verbose)
 
     cont_clip = out_dir / "hook_cont.wav"
     hook_clip = find_hook_clip(song["mp3_path"], out_dir / "hook.wav",
