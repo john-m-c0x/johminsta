@@ -17,8 +17,14 @@ from spotify import Song
 from display import caption
 from video   import Post
 
-POLL_INTERVAL = 5
-POLL_TIMEOUT  = 600
+POLL_INTERVAL    = 5
+POLL_TIMEOUT     = 600
+POLL_BACKOFF_MAX = 120
+
+# graph api error codes with a known meaning worth a targeted message
+RATE_LIMIT_CODE    = 4        # app-level request limit (hourly window)
+PUBLISH_QUOTA_CODE = 9        # content-publishing cap (25 posts / 24h)
+PUBLISH_QUOTA_SUB  = 2207042
 
 
 def _upload_release_assets(paths: list[Path], notes: str) -> list[str]:
@@ -66,18 +72,32 @@ def _graph(endpoint: str, **kwargs) -> dict:
     base    = f"https://graph.instagram.com/{user_id}/{endpoint}"
     result  = requests.post(base, params={"access_token": token}, **kwargs).json()
     if "error" in result:
-        err = result["error"]
-        # code 9 / subcode 2207042 is the hard content-publishing cap
-        # (25 posts per rolling 24h). retrying cannot help - fail loudly
-        # with an actionable message instead of a generic error.
-        if err.get("code") == 9 or err.get("error_subcode") == 2207042:
-            raise RuntimeError(
-                "instagram publish quota exhausted (25 posts per rolling 24h). "
-                "do NOT retry - the window has to clear on its own. "
-                f"full error: {err}"
-            )
-        raise RuntimeError(f"graph api error on {endpoint}: {err}")
+        _raise_graph_error(result["error"], f"on {endpoint}")
     return result
+
+
+def _raise_graph_error(err: dict, context: str) -> None:
+    """turn a graph api error payload into an exception with an actionable
+    message for the failure modes we've actually hit (see the 2026-07-10
+    quota and 2026-07-11 rate-limit incidents)."""
+    # code 9 / subcode 2207042 is the hard content-publishing cap
+    # (25 posts per rolling 24h). retrying cannot help - fail loudly
+    # with an actionable message instead of a generic error.
+    if err.get("code") == PUBLISH_QUOTA_CODE or err.get("error_subcode") == PUBLISH_QUOTA_SUB:
+        raise RuntimeError(
+            "instagram publish quota exhausted (25 posts per rolling 24h). "
+            "do NOT retry - the window has to clear on its own. "
+            f"full error: {err}"
+        )
+    # code 4 is the app-level request limit (calls per hour, not posts per
+    # day). retrying immediately only sustains the limit.
+    if err.get("code") == RATE_LIMIT_CODE:
+        raise RuntimeError(
+            "instagram app-level request limit reached (code 4). wait for the "
+            "hourly window to clear before rerunning - retrying immediately "
+            f"only sustains the limit. full error {context}: {err}"
+        )
+    raise RuntimeError(f"graph api error {context}: {err}")
 
 
 def _publish_quota_remaining() -> int | None:
@@ -102,20 +122,43 @@ def _wait_until_ready(container_id: str) -> None:
     token    = os.getenv("INSTAGRAM_ACCOUNT_TOKEN")
     url      = f"https://graph.instagram.com/{container_id}"
     deadline = time.time() + POLL_TIMEOUT
+    delay    = POLL_INTERVAL
 
     last_status = None
     while time.time() < deadline:
         last_status = requests.get(
-            url, params={"fields": "status_code,status", "access_token": token}
+            url, params={"fields": "status_code,status", "access_token": token},
+            timeout=30,
         ).json()
-        code = last_status.get("status_code")
         print(f"container {container_id} status: {last_status}", flush=True)
-        if code == "FINISHED":
-            return
-        if code == "ERROR":
-            raise RuntimeError(f"instagram failed to process video: {last_status}")
-        time.sleep(POLL_INTERVAL)
 
+        err = last_status.get("error")
+        if err:
+            # each poll is itself an api call, so polling through a rate
+            # limit at POLL_INTERVAL sustains the very limit we're hitting
+            # (the 2026-07-11 incident). back off instead, and bail out on
+            # anything that isn't a transient rate limit.
+            if err.get("code") == RATE_LIMIT_CODE or err.get("is_transient"):
+                delay = min(delay * 2, POLL_BACKOFF_MAX)
+            else:
+                _raise_graph_error(err, f"while polling container {container_id}")
+        else:
+            delay = POLL_INTERVAL
+            code  = last_status.get("status_code")
+            if code == "FINISHED":
+                return
+            if code == "ERROR":
+                raise RuntimeError(f"instagram failed to process video: {last_status}")
+
+        # never sleep past the deadline - a backed-off delay could otherwise
+        # overshoot it by minutes.
+        time.sleep(max(0, min(delay, deadline - time.time())))
+
+    if last_status and "error" in last_status:
+        _raise_graph_error(
+            last_status["error"],
+            f"polling container {container_id} (gave up after {POLL_TIMEOUT}s)",
+        )
     raise TimeoutError(
         f"instagram media container did not finish processing in "
         f"{POLL_TIMEOUT}s (last status: {last_status})"
