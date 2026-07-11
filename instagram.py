@@ -46,8 +46,36 @@ def _graph(endpoint: str, **kwargs) -> dict:
     base    = f"https://graph.instagram.com/{user_id}/{endpoint}"
     result  = requests.post(base, params={"access_token": token}, **kwargs).json()
     if "error" in result:
-        raise RuntimeError(f"graph api error on {endpoint}: {result['error']}")
+        err = result["error"]
+        # code 9 / subcode 2207042 is the hard content-publishing cap
+        # (25 posts per rolling 24h). retrying cannot help - fail loudly
+        # with an actionable message instead of a generic error.
+        if err.get("code") == 9 or err.get("error_subcode") == 2207042:
+            raise RuntimeError(
+                "instagram publish quota exhausted (25 posts per rolling 24h). "
+                "do NOT retry - the window has to clear on its own. "
+                f"full error: {err}"
+            )
+        raise RuntimeError(f"graph api error on {endpoint}: {err}")
     return result
+
+
+def _publish_quota_remaining() -> int | None:
+    """posts left in the rolling 24h content-publishing window, or None when
+    the check itself fails (the endpoint isn't available on every account
+    type - in that case just proceed and let the publish call decide)."""
+    token   = os.getenv("INSTAGRAM_ACCOUNT_TOKEN")
+    user_id = os.getenv("INSTAGRAM_USER_ID")
+    try:
+        resp = requests.get(
+            f"https://graph.instagram.com/{user_id}/content_publishing_limit",
+            params={"fields": "quota_usage,config", "access_token": token},
+            timeout=10,
+        ).json()
+        entry = resp["data"][0]
+        return entry["config"]["quota_total"] - entry["quota_usage"]
+    except Exception:
+        return None
 
 
 def _wait_until_ready(container_id: str) -> None:
@@ -91,17 +119,20 @@ def _post_reel(song: Song, video_url: str) -> None:
     _graph("media_publish", data={"creation_id": container["id"]})
 
 
-def _post_carousel(song: Song, video_url: str, image_url: str) -> None:
-    """two-slide carousel: the album-art video, then the analysis image. each
-    child is built with is_carousel_item, then bundled under a CAROUSEL parent.
-    carousel video children use media_type VIDEO (REELS isn't allowed here)."""
+def _post_carousel(song: Song, video_url: str, slide_url: str) -> None:
+    """two-slide carousel: the album-art video, then the analysis slide (also a
+    video - its audio picks up where slide 1's clip ends, since carousels have
+    no shared soundtrack). each child is built with is_carousel_item, then
+    bundled under a CAROUSEL parent. carousel video children use media_type
+    VIDEO (REELS isn't allowed here)."""
     children = [
         _graph("media", data={
             "media_type": "VIDEO", "video_url": video_url,
             "is_carousel_item": "true",
         }),
         _graph("media", data={
-            "image_url": image_url, "is_carousel_item": "true",
+            "media_type": "VIDEO", "video_url": slide_url,
+            "is_carousel_item": "true",
         }),
     ]
     for child in children:
@@ -117,10 +148,21 @@ def _post_carousel(song: Song, video_url: str, image_url: str) -> None:
 
 
 def post_song(song: Song, post: Post) -> None:
+    # pre-flight: skip the whole upload/publish dance when the 24h publishing
+    # quota is already spent - the publish call would only fail at the end.
+    remaining = _publish_quota_remaining()
+    if remaining is not None:
+        print(f"publish quota: {remaining} post(s) left in the 24h window")
+        if remaining <= 0:
+            raise RuntimeError(
+                "instagram publish quota exhausted (25 posts per rolling 24h) - "
+                "skipping publish. try again after the window clears."
+            )
+
     if post.slide is None:
         [video_url] = _upload_release_assets([post.video])
         _post_reel(song, video_url)
         return
 
-    video_url, image_url = _upload_release_assets([post.video, post.slide])
-    _post_carousel(song, video_url, image_url)
+    video_url, slide_url = _upload_release_assets([post.video, post.slide])
+    _post_carousel(song, video_url, slide_url)

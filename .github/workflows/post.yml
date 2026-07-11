@@ -10,6 +10,13 @@ on:
 permissions:
   contents: write
 
+# one posting run at a time, queued not cancelled - rapid manual dispatches
+# can't stack into parallel publishes (each publish counts toward instagram's
+# hard 25-posts/24h quota; see the 2026-07-10 rate-limit incident).
+concurrency:
+  group: post-song
+  cancel-in-progress: false
+
 jobs:
   post:
     # self-hosted so downloads run from a residential IP. youtube serves

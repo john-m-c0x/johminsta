@@ -40,8 +40,10 @@ def main(verbose: bool = False, dry_run: bool = False) -> None:
     song = get_random_liked_song(out_dir=out_dir, verbose=verbose)
     show_song(song)
 
-    hook_clip = find_hook_clip(song["mp3_path"], out_dir / "hook.wav")
-    post      = build_post(song, hook_clip, out_dir)
+    cont_clip = out_dir / "hook_cont.wav"
+    hook_clip = find_hook_clip(song["mp3_path"], out_dir / "hook.wav",
+                               continuation_out=cont_clip)
+    post      = build_post(song, hook_clip, out_dir, cont_clip=cont_clip)
 
     if dry_run:
         caption_path = out_dir / "caption.txt"

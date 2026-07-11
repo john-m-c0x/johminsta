@@ -52,37 +52,58 @@ def _best_start(levels: list[float], clip_length: int) -> int:
     return best_start
 
 
-def _select_clip(audio: AudioSegment, clip_length: int) -> AudioSegment:
+def _select_start(audio: AudioSegment, clip_length: int) -> int:
     """
-    return the clip_length-second slice of `audio` that best captures the hook.
-    analysis runs on a mono downmix (loudness only), but the returned slice is
-    cut from the original `audio` so channels/bitrate are preserved. falls back
-    to the whole track when it's shorter than clip_length.
+    start second of the clip_length-second slice that best captures the hook.
+    analysis runs on a mono downmix (loudness only). returns 0 when the track
+    is shorter than clip_length (the caller just takes the whole thing).
     """
     if len(audio) <= clip_length * 1000:
-        return audio
+        return 0
 
     levels = _energy_profile(audio.set_channels(1))
     drop   = _best_start(levels, clip_length)
-    start  = max(0, drop - PRE_ROLL_S)
-    return audio[start * 1000: (start + clip_length) * 1000]
+    return max(0, drop - PRE_ROLL_S)
 
 
-def find_hook_clip(mp3_path: Path, out_path: Path, clip_length: int = CLIP_LENGTH) -> Path:
+def _export(clip: AudioSegment, out_path: Path) -> Path:
+    clip.export(
+        out_path,
+        format=out_path.suffix.lstrip(".") or "mp3",
+        bitrate=EXPORT_BITRATE,
+    )
+    return out_path
+
+
+def find_hook_clip(
+    mp3_path: Path,
+    out_path: Path,
+    clip_length: int = CLIP_LENGTH,
+    continuation_out: Path | None = None,
+) -> Path:
     """
     scan the track in 1s slices for the loudest clip_length-second window that
     follows a rise in energy - the drop - and export a clip starting PRE_ROLL_S
     seconds before it, so the listener gets a moment of anticipation instead of
     landing right on the hit. the clip is cut from the original audio and
     re-encoded at EXPORT_BITRATE, keeping the source's channels and fidelity.
+
+    when continuation_out is given, also export the NEXT clip_length seconds
+    (picking up exactly where the hook clip ends) - used as the audio for the
+    carousel's second slide so the song carries on across the swipe. if the
+    track ends less than 5s after the hook clip, the hook clip itself is
+    reused rather than exporting a stub.
     """
     audio = AudioSegment.from_file(mp3_path)
-    clip  = _select_clip(audio, clip_length)
-    clip.export(
-        out_path,
-        format=out_path.suffix.lstrip(".") or "mp3",
-        bitrate=EXPORT_BITRATE,
-    )
+    start = _select_start(audio, clip_length)
+    clip  = audio[start * 1000: (start + clip_length) * 1000]
+    _export(clip, out_path)
+
+    if continuation_out is not None:
+        cont_start = start + clip_length
+        cont = audio[cont_start * 1000: (cont_start + clip_length) * 1000]
+        _export(cont if len(cont) >= 5000 else clip, continuation_out)
+
     return out_path
 
 
