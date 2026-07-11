@@ -6,6 +6,7 @@ upload path via the simple content publishing flow.
 """
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -20,9 +21,11 @@ POLL_INTERVAL = 5
 POLL_TIMEOUT  = 600
 
 
-def _upload_release_assets(paths: list[Path]) -> list[str]:
+def _upload_release_assets(paths: list[Path], notes: str) -> list[str]:
     """host each file as an asset on one github release and return their public
-    download urls (in the same order) - the graph api fetches media by url."""
+    download urls (in the same order) - the graph api fetches media by url.
+    `notes` should identify the song (name + spotify uri): the releases double
+    as the posting history that recently_posted_uris() reads back."""
     repo = os.environ["GITHUB_REPOSITORY"]
     tag  = f"post-{int(time.time())}"
 
@@ -30,7 +33,7 @@ def _upload_release_assets(paths: list[Path]) -> list[str]:
         [
             "gh", "release", "create", tag, *[str(p) for p in paths],
             "--title", tag,
-            "--notes", "auto-generated post",
+            "--notes", notes,
         ],
         check=True,
     )
@@ -38,6 +41,23 @@ def _upload_release_assets(paths: list[Path]) -> list[str]:
         f"https://github.com/{repo}/releases/download/{tag}/{p.name}"
         for p in paths
     ]
+
+
+def recently_posted_uris(limit: int = 50) -> set[str]:
+    """spotify track uris from the last `limit` post releases - the picker
+    excludes these so the same song can't post twice in quick succession.
+    returns an empty set outside CI (no GITHUB_REPOSITORY) or on any failure:
+    the exclusion is best-effort, never a reason not to post."""
+    repo = os.getenv("GITHUB_REPOSITORY")
+    if not repo:
+        return set()
+    result = subprocess.run(
+        ["gh", "api", f"repos/{repo}/releases?per_page={limit}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return set(re.findall(r"spotify:track:\w+", result.stdout))
 
 
 def _graph(endpoint: str, **kwargs) -> dict:
@@ -159,10 +179,11 @@ def post_song(song: Song, post: Post) -> None:
                 "skipping publish. try again after the window clears."
             )
 
+    notes = f"{song['name']} - {song['artist']}\n{song['uri']}"
     if post.slide is None:
-        [video_url] = _upload_release_assets([post.video])
+        [video_url] = _upload_release_assets([post.video], notes)
         _post_reel(song, video_url)
         return
 
-    video_url, slide_url = _upload_release_assets([post.video, post.slide])
+    video_url, slide_url = _upload_release_assets([post.video, post.slide], notes)
     _post_carousel(song, video_url, slide_url)

@@ -30,7 +30,7 @@ from analysis  import analyze_track
 from chorus    import find_hook_clip
 from display   import show_song, caption
 from video     import build_post
-from instagram import post_song
+from instagram import post_song, recently_posted_uris
 
 
 def main(verbose: bool = False, dry_run: bool = False) -> None:
@@ -39,7 +39,8 @@ def main(verbose: bool = False, dry_run: bool = False) -> None:
     out_dir = Path.home() / "song"
     out_dir.mkdir(exist_ok=True)
 
-    song = get_random_liked_song(out_dir=out_dir, verbose=verbose)
+    song = get_random_liked_song(out_dir=out_dir, verbose=verbose,
+                                 exclude=recently_posted_uris())
     show_song(song)
 
     # reccobeats has catalog gaps; analyze the mp3 locally rather than posting

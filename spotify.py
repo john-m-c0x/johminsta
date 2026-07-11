@@ -198,7 +198,11 @@ def get_random_liked_song(
     out_dir: Path = Path.home() / "song",
     verbose: bool = False,
     max_retries: int = 5,
+    exclude: set[str] | None = None,
 ) -> Song:
+    """`exclude` is a set of track uris to skip (recently posted songs) - a
+    uniform pick is memoryless, so without it repeats show up on birthday-
+    paradox schedule. an excluded pick just burns a retry."""
     out_dir.mkdir(exist_ok=True)
     sp = _client()
 
@@ -211,6 +215,8 @@ def get_random_liked_song(
             images = track["album"]["images"]
             if verbose:
                 print(f"[{attempt}/{max_retries}] trying: {name} - {artist}")
+            if exclude and track["uri"] in exclude:
+                raise LookupError("posted recently, re-rolling")
             if not images:
                 raise LookupError("no album art available")
             return Song(
