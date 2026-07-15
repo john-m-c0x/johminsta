@@ -25,6 +25,10 @@ jobs:
     # IP is not gated and needs no cookies. requires a machine with python,
     # ffmpeg, and cairo on PATH (see README) running the actions runner.
     runs-on: [self-hosted]
+    # a healthy run finishes in a few minutes; a wedged one (e.g. the
+    # 2026-07-11 rate-limit poll loop) would otherwise hold the concurrency
+    # queue for the 6h default until someone cancels it by hand.
+    timeout-minutes: 30
     env:
       # the runner's stdout is cp1252 on windows; force utf-8 so rich can
       # print emoji/unicode (song titles, the headphone glyph) without a
