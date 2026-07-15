@@ -17,7 +17,10 @@ from spotify import Song
 from display import caption
 from video   import Post
 
-POLL_INTERVAL    = 5
+# meta's guidance is to check container status about once per minute. every
+# poll is a billable api call - at 5s a run cost ~25 calls, and back-to-back
+# queued runs tripped the code-4 hourly limit (2026-07-15 incident).
+POLL_INTERVAL    = 60
 POLL_TIMEOUT     = 600
 POLL_BACKOFF_MAX = 120
 
@@ -145,7 +148,7 @@ def _wait_until_ready(container_id: str) -> None:
         else:
             delay = POLL_INTERVAL
             code  = last_status.get("status_code")
-            if code == "FINISHED":
+            if code in ("FINISHED", "PUBLISHED"):
                 return
             if code == "ERROR":
                 raise RuntimeError(f"instagram failed to process video: {last_status}")
@@ -165,6 +168,33 @@ def _wait_until_ready(container_id: str) -> None:
     )
 
 
+def _publish(container_id: str) -> None:
+    """media_publish with a safety net: instagram sometimes rejects the call
+    (rate limit code 4 / "action is blocked" 2207051) while still publishing
+    the media - the 2026-07-15 failures all posted successfully. before
+    treating the rejection as fatal, check whether the container went live."""
+    try:
+        _graph("media_publish", data={"creation_id": container_id})
+        return
+    except RuntimeError:
+        time.sleep(POLL_INTERVAL)
+        status = requests.get(
+            f"https://graph.instagram.com/{container_id}",
+            params={
+                "fields":       "status_code",
+                "access_token": os.getenv("INSTAGRAM_ACCOUNT_TOKEN"),
+            },
+            timeout=30,
+        ).json()
+        if status.get("status_code") == "PUBLISHED":
+            print(
+                f"container {container_id} published despite media_publish error",
+                flush=True,
+            )
+            return
+        raise
+
+
 def _post_reel(song: Song, video_url: str) -> None:
     """single-slide fallback: a square reel that also shows in the feed grid.
     instagram deprecated the plain VIDEO media_type - all standalone video now
@@ -179,7 +209,7 @@ def _post_reel(song: Song, video_url: str) -> None:
         },
     )
     _wait_until_ready(container["id"])
-    _graph("media_publish", data={"creation_id": container["id"]})
+    _publish(container["id"])
 
 
 def _post_carousel(song: Song, video_url: str, slide_url: str) -> None:
@@ -207,7 +237,7 @@ def _post_carousel(song: Song, video_url: str, slide_url: str) -> None:
         "caption":    caption(song),
     })
     _wait_until_ready(parent["id"])
-    _graph("media_publish", data={"creation_id": parent["id"]})
+    _publish(parent["id"])
 
 
 def post_song(song: Song, post: Post) -> None:
